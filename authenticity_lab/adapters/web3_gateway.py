@@ -90,9 +90,16 @@ class GanacheProvenanceGateway:
     def _record_from_event(self, event) -> ProvenanceRecord:
         args = event["args"]
         tx_hash = event["transactionHash"]
+        media_hash = args["mediaHash"]
+        owner = args["owner"]
+        # Convert bytes to hex strings if needed
+        if isinstance(media_hash, bytes):
+            media_hash = media_hash.hex()
+        if isinstance(owner, bytes):
+            owner = owner.hex()
         return ProvenanceRecord(
-            media_hash=args["mediaHash"],
-            owner=args["owner"],
+            media_hash=str(media_hash),
+            owner=str(owner),
             timestamp=str(args["timestamp"]),
             metadata=self._decode_metadata(args["metadata"]),
             transaction_id=tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash),
