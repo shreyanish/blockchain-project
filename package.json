@@ -1,0 +1,15 @@
+{
+  "name": "authenticity-verification-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Hardhat/Ganache tooling for the MediaProvenance research prototype.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:ganache": "hardhat run scripts/deploy_contract.cjs --network ganache"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "ethers": "^6.13.0",
+    "hardhat": "^2.22.0"
+  }
+}

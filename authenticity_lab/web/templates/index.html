@@ -12,56 +12,70 @@
         <div class="brand">
           <div class="brand-mark">AV</div>
           <div>
-            <strong>Authenticity Lab</strong>
-            <span>Local provenance · explainable verification</span>
+            <strong>Authenticity Verification Lab</strong>
+            <span>Hash-only provenance · metadata drift · AI-assisted scoring</span>
           </div>
         </div>
-        <div class="network-pill">Local Ledger</div>
+        <div class="network-pill">Local research ledger</div>
       </header>
 
       <section class="stage">
-        <aside class="control-panel">
-          <form id="media-form" class="upload-card">
-            <div class="card-head">
-              <p class="eyebrow">Media Intake</p>
-              <h1>Verify</h1>
-            </div>
-            <label>
-              Owner
-              <input name="owner" value="research-demo" autocomplete="off">
+        <aside class="panel control-panel">
+          <header class="panel-header">
+            <p class="panel-label">Media Intake</p>
+            <h1 class="panel-title">Register or verify an image</h1>
+          </header>
+          <form id="media-form" class="panel-body">
+            <label class="form-group">
+              <span>Owner identifier</span>
+              <input name="owner" type="text" value="research-demo" autocomplete="off">
             </label>
-            <label>
-              Image
+            <label class="form-group">
+              <span>Image evidence</span>
               <input name="media" type="file" accept="image/*" required>
             </label>
-            <label>
-              Reference
+            <label class="form-group">
+              <span>Compare against registered original</span>
               <select name="reference_hash" id="reference-select">
                 <option value="">No selected reference</option>
               </select>
             </label>
-            <div class="actions">
-              <button type="button" data-action="register">Register</button>
-              <button type="button" data-action="verify">Verify</button>
+            <div class="action-grid">
+              <button class="btn btn-primary" type="button" data-action="register">Register</button>
+              <button class="btn" type="button" data-action="verify">Verify</button>
             </div>
+            <section class="pipeline-primer" aria-label="Verification pipeline">
+              <h2>Pipeline</h2>
+              <ol>
+                <li>SHA-256 hash</li>
+                <li>Blockchain lookup</li>
+                <li>Metadata analysis</li>
+                <li>AI authenticity</li>
+                <li>Trust score</li>
+              </ol>
+            </section>
           </form>
         </aside>
 
-        <section class="report-panel">
-          <section id="report" class="report empty">
-            <div class="empty-orb">SHA</div>
-            <h2>No report loaded</h2>
-            <p>Choose a sample image, then register or verify.</p>
+        <section class="panel report-panel">
+          <header class="panel-header">
+            <p class="panel-label">Verification Report</p>
+            <h2 class="panel-title">Transparent evidence stack</h2>
+          </header>
+          <section id="report" class="report report-idle">
+            <div class="idle-token">SHA</div>
+            <h2>Awaiting media</h2>
+            <p>Upload an image to produce a layered report with provenance, metadata, AI evidence, and a weighted trust score.</p>
           </section>
         </section>
 
-        <aside class="ledger-panel">
-          <header class="ledger-header">
+        <aside class="panel ledger-panel">
+          <header class="panel-header ledger-header">
             <div>
-              <p class="eyebrow">Collection</p>
-              <h2>Registered Media</h2>
+              <p class="panel-label">Provenance Explorer</p>
+              <h2 class="panel-title">Registered media</h2>
             </div>
-            <button type="button" id="refresh-ledger">Refresh</button>
+            <button class="btn btn-small" type="button" id="refresh-ledger">Refresh</button>
           </header>
           <div id="ledger-records" class="ledger-empty">No records</div>
         </aside>
@@ -79,74 +93,154 @@
       import("https://esm.sh/blo@2.0.0")
         .then((module) => {
           blockie = module.blo;
-          loadLedger();
+          return loadLedger();
         })
         .catch(() => {
           blockie = null;
         });
 
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
       function percent(value) {
-        return `${Math.round(value * 100)}%`;
+        return `${Math.round((value || 0) * 100)}%`;
       }
 
       function shortHash(hash) {
-        return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+        if (!hash) return "none";
+        return `${hash.slice(0, 12)}...${hash.slice(-10)}`;
       }
 
       function hashAddress(hash) {
-        return `0x${hash.slice(0, 40)}`;
+        return `0x${String(hash || "").slice(0, 40).padEnd(40, "0")}`;
+      }
+
+      function statusClass(status) {
+        const normalized = String(status || "").toLowerCase();
+        if (normalized.includes("verified") || normalized.includes("consistent") || normalized.includes("high")) return "good";
+        if (normalized.includes("partial") || normalized.includes("uncertain") || normalized.includes("medium") || normalized.includes("derivative")) return "warn";
+        return "bad";
       }
 
       function identicon(hash) {
         const address = hashAddress(hash);
         if (!blockie) {
-          return `<div class="hash-avatar fallback">${hash.slice(0, 2).toUpperCase()}</div>`;
+          return `<div class="hash-avatar hash-avatar-fallback">${escapeHtml(address.slice(2, 4).toUpperCase())}</div>`;
         }
-        return `<img class="hash-avatar" src="${blockie(address)}" alt="Identicon for ${address}">`;
+        return `<img class="hash-avatar" src="${blockie(address)}" alt="Ethereum identicon for ${escapeHtml(address)}">`;
       }
 
       function factorList(factors) {
-        return factors.map((factor) => `
+        return (factors || []).map((factor) => `
           <li>
             <div>
-              <strong>${factor.name}</strong>
-              <span>${factor.status}</span>
+              <strong>${escapeHtml(factor.name)}</strong>
+              <span class="${statusClass(factor.status)}">${escapeHtml(factor.status)}</span>
             </div>
-            <p>${factor.explanation}</p>
+            <p>${escapeHtml(factor.explanation)}</p>
           </li>
         `).join("");
       }
 
       function layerMeta(layer) {
-        if (!layer.raw || !layer.raw.model) return "";
-        const predictions = layer.raw.top_predictions
-          ? `<pre>${JSON.stringify(layer.raw.top_predictions, null, 2)}</pre>`
+        if (!layer.raw) return "";
+        const model = layer.raw.model
+          ? `<div><strong>Model</strong><span>${escapeHtml(layer.raw.model)}</span></div>`
           : "";
-        return `
-          <aside class="layer-meta">
-            <div><strong>Model</strong><span>${layer.raw.model}</span></div>
-            <div><strong>Mode</strong><span>${layer.raw.mode || "inference"}</span></div>
-            <p>${layer.raw.limitations || layer.raw.note || ""}</p>
-            ${predictions}
-          </aside>
-        `;
+        const mode = layer.raw.mode
+          ? `<div><strong>Mode</strong><span>${escapeHtml(layer.raw.mode)}</span></div>`
+          : "";
+        const limitations = layer.raw.limitations || layer.raw.note
+          ? `<p>${escapeHtml(layer.raw.limitations || layer.raw.note)}</p>`
+          : "";
+        const predictions = layer.raw.top_predictions
+          ? `<pre>${escapeHtml(JSON.stringify(layer.raw.top_predictions, null, 2))}</pre>`
+          : "";
+        return model || mode || limitations || predictions
+          ? `<aside class="layer-meta">${model}${mode}${limitations}${predictions}</aside>`
+          : "";
       }
 
       function layerCard(layer) {
         if (!layer) return "";
         return `
-          <article class="layer">
+          <article class="layer-card ${statusClass(layer.status)}">
             <header>
               <div>
-                <h3>${layer.layer}</h3>
-                <span>${layer.status}</span>
+                <h3>${escapeHtml(layer.layer)}</h3>
+                <span>${escapeHtml(layer.status)}</span>
               </div>
-              <div class="mini-score" style="--score:${Math.round(layer.score * 100)}%">${percent(layer.score)}</div>
+              <strong>${percent(layer.score)}</strong>
             </header>
-            <p>${layer.summary}</p>
+            <p>${escapeHtml(layer.summary)}</p>
             ${layerMeta(layer)}
             <ul>${factorList(layer.factors)}</ul>
           </article>
+        `;
+      }
+
+      function metricsGrid(metrics) {
+        if (!metrics) return "";
+        const entries = [
+          ["Hash", metrics.hash_generation_ms],
+          ["Lookup", metrics.blockchain_lookup_ms],
+          ["Metadata", metrics.metadata_analysis_ms],
+          ["AI", metrics.ai_analysis_ms],
+          ["Trust", metrics.trust_scoring_ms],
+          ["Total", metrics.total_verification_ms],
+        ];
+        return `
+          <section class="metrics-grid">
+            ${entries.map(([label, value]) => `
+              <div>
+                <strong>${escapeHtml(label)}</strong>
+                <span>${Number(value || 0).toFixed(3)} ms</span>
+              </div>
+            `).join("")}
+          </section>
+        `;
+      }
+
+      function renderPipeline(stages) {
+        return `
+          <section class="pipeline-strip">
+            ${(stages || []).map((stage, index) => `
+              <div>
+                <span>${String(index + 1).padStart(2, "0")}</span>
+                <strong>${escapeHtml(stage)}</strong>
+              </div>
+            `).join("")}
+          </section>
+        `;
+      }
+
+      function registrationCertificate(record) {
+        if (!record) return "";
+        const metrics = record.metadata?.registration_metrics;
+        return `
+          <section class="certificate">
+            <div class="certificate-mark">
+              ${identicon(record.media_hash)}
+            </div>
+            <div>
+              <p class="panel-label">Provenance Certificate</p>
+              <h3>${escapeHtml(record.metadata?.file_name || "registered media")}</h3>
+              <dl>
+                <div><dt>Hash</dt><dd><code>${escapeHtml(record.media_hash)}</code></dd></div>
+                <div><dt>Transaction</dt><dd><code>${escapeHtml(record.transaction_id)}</code></dd></div>
+                <div><dt>Block</dt><dd>${escapeHtml(record.block_number)}</dd></div>
+                <div><dt>Timestamp</dt><dd>${escapeHtml(record.timestamp)}</dd></div>
+                <div><dt>Owner</dt><dd>${escapeHtml(record.owner)}</dd></div>
+                ${metrics ? `<div><dt>Confirmation</dt><dd>${Number(metrics.transaction_confirmation_ms || 0).toFixed(3)} ms</dd></div>` : ""}
+              </dl>
+            </div>
+          </section>
         `;
       }
 
@@ -159,19 +253,19 @@
           return;
         }
 
-        ledgerRecords.className = "ledger-grid";
+        ledgerRecords.className = "ledger-list";
         ledgerRecords.innerHTML = records.map((record) => `
           <article class="ledger-card">
             ${identicon(record.media_hash)}
-            <div class="ledger-copy">
+            <div>
               <header>
-                <strong>${record.metadata.file_name || "registered media"}</strong>
-                <span>Block ${record.block_number}</span>
+                <strong>${escapeHtml(record.metadata.file_name || "registered media")}</strong>
+                <span>Block ${escapeHtml(record.block_number)}</span>
               </header>
-              <code>${shortHash(record.media_hash)}</code>
+              <code>${escapeHtml(shortHash(record.media_hash))}</code>
               <footer>
-                <span>${record.owner}</span>
-                <span>${record.chain_id}</span>
+                <span>${escapeHtml(record.owner)}</span>
+                <span>${escapeHtml(record.chain_id)}</span>
               </footer>
             </div>
           </article>
@@ -194,19 +288,23 @@
 
       function render(payload) {
         const data = payload.verification || payload;
+        const certificateRecord = payload.record || data.provenance_record;
         report.className = "report";
         report.innerHTML = `
           <section class="report-hero">
             <div>
-              <p class="eyebrow">Verification Report</p>
-              <h2>${data.file_name}</h2>
-              <code>${data.media_hash}</code>
+              <p class="panel-label">Generated ${escapeHtml(data.generated_at)}</p>
+              <h2>${escapeHtml(data.file_name)}</h2>
+              <code>${escapeHtml(data.media_hash)}</code>
             </div>
-            <div class="trust-token">
+            <div class="trust-token ${statusClass(data.trust.status)}">
               <span>${percent(data.trust.score)}</span>
-              <strong>${data.trust.status}</strong>
+              <strong>${escapeHtml(data.trust.status)}</strong>
             </div>
           </section>
+          ${registrationCertificate(certificateRecord)}
+          ${renderPipeline(data.pipeline)}
+          ${metricsGrid(data.system_metrics)}
           <section class="layers">
             ${layerCard(data.blockchain)}
             ${layerCard(data.reference)}
@@ -217,11 +315,11 @@
           <section class="record-strip">
             <article>
               <h3>Matched Provenance</h3>
-              <pre>${JSON.stringify(data.provenance_record || { status: "No matching record" }, null, 2)}</pre>
+              <pre>${escapeHtml(JSON.stringify(data.provenance_record || { status: "No matching record" }, null, 2))}</pre>
             </article>
             <article>
               <h3>Selected Reference</h3>
-              <pre>${JSON.stringify(data.reference_record || { status: "No selected reference" }, null, 2)}</pre>
+              <pre>${escapeHtml(JSON.stringify(data.reference_record || { status: "No selected reference" }, null, 2))}</pre>
             </article>
           </section>
         `;
@@ -229,11 +327,13 @@
 
       async function submit(action) {
         const body = new FormData(form);
+        report.className = "report report-idle";
+        report.innerHTML = `<div class="idle-token">...</div><h2>Running ${escapeHtml(action)}</h2><p>Hashing media and collecting verification evidence.</p>`;
         const response = await fetch(`/api/${action}`, { method: "POST", body });
         const payload = await response.json();
         if (!response.ok) {
-          report.className = "report empty";
-          report.innerHTML = `<div class="empty-orb">ERR</div><h2>Request failed</h2><p>${payload.error || "Try again."}</p>`;
+          report.className = "report report-error";
+          report.innerHTML = `<div class="idle-token">ERR</div><h2>Request failed</h2><p>${escapeHtml(payload.error || "Try again.")}</p>`;
           return;
         }
         render(payload);

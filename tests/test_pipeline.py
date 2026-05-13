@@ -6,6 +6,7 @@ from authenticity_lab.core.hashing import sha256_bytes
 from authenticity_lab.core.metadata import MetadataAnalyzer
 from authenticity_lab.core.pipeline import VerificationPipeline
 from authenticity_lab.core.provenance import LocalResearchLedger, ProvenanceService
+from authenticity_lab.evaluation import run_evaluation
 
 
 class PipelineTests(unittest.TestCase):
@@ -28,6 +29,8 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(report.blockchain.status, "VERIFIED")
             self.assertIsNotNone(report.provenance_record)
             self.assertGreater(report.trust.score, 0)
+            self.assertGreaterEqual(report.system_metrics.total_verification_ms, 0)
+            self.assertIn("hash_generation_ms", report.system_metrics.to_dict())
 
     def test_unknown_media_is_unregistered(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -81,6 +84,7 @@ class PipelineTests(unittest.TestCase):
             any(factor.status == "MISMATCH" for factor in edited_result.factors),
             "Edited sample should expose registered-profile mismatches.",
         )
+        self.assertEqual(reference_result.raw["format"], "PNG")
 
     def test_edited_sample_can_be_compared_against_registered_reference(self):
         root = Path(__file__).resolve().parents[1]
@@ -109,6 +113,32 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(report.reference.status, "DERIVATIVE_CHECK")
             self.assertIsNotNone(report.reference_record)
             self.assertLess(report.metadata.score, 0.75)
+
+    def test_deepfake_proxy_produces_suspicious_ai_signal(self):
+        root = Path(__file__).resolve().parents[1]
+        sample_path = root / "samples" / "deepfake_proxy.png"
+
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = LocalResearchLedger(Path(directory) / "records.json")
+            pipeline = VerificationPipeline(ProvenanceService(ledger))
+            report = pipeline.verify(
+                content=sample_path.read_bytes(),
+                file_name=sample_path.name,
+            )
+
+            self.assertEqual(report.blockchain.status, "UNREGISTERED")
+            self.assertEqual(report.ai.status, "SUSPICIOUS")
+            self.assertEqual(report.trust.status, "LOW_TRUST")
+
+    def test_evaluation_reports_north_star_metrics_and_required_cases(self):
+        root = Path(__file__).resolve().parents[1]
+        payload = run_evaluation(root)
+
+        self.assertEqual(payload["summary"]["cases"], 5)
+        self.assertEqual(payload["summary"]["passed"], 5)
+        self.assertIn("accuracy", payload["metrics"]["ai"])
+        self.assertIn("mean_total_verification_ms", payload["metrics"]["system"])
+        self.assertIn("tamper_detection_rate", payload["metrics"]["framework"])
 
 
 if __name__ == "__main__":

@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from authenticity_lab.core.ai import AuthenticityAnalyzer, build_authenticity_analyzer
 from authenticity_lab.core.hashing import sha256_bytes
 from authenticity_lab.core.metadata import MetadataAnalyzer
-from authenticity_lab.core.models import EvidenceFactor, LayerResult, ProvenanceRecord, VerificationReport, utc_now_iso
+from authenticity_lab.core.models import (
+    EvidenceFactor,
+    LayerResult,
+    ProvenanceRecord,
+    SystemMetrics,
+    VerificationReport,
+    utc_now_iso,
+)
 from authenticity_lab.core.provenance import ProvenanceService
 from authenticity_lab.core.trust import TrustScoreEngine
 
@@ -31,7 +40,9 @@ class VerificationPipeline:
         self.trust_engine = trust_engine or TrustScoreEngine()
 
     def register(self, content: bytes, file_name: str, owner: str = "research-demo") -> ProvenanceRecord:
+        started = perf_counter()
         media_hash = sha256_bytes(content)
+        hash_finished = perf_counter()
         media_profile = self.metadata_analyzer.inspect_profile(content, file_name)
         metadata = {
             "file_name": file_name,
@@ -40,21 +51,43 @@ class VerificationPipeline:
             "storage_policy": "hash-only",
             "media_profile": media_profile,
         }
-        return self.provenance.register(media_hash=media_hash, owner=owner, metadata=metadata)
+        record = self.provenance.register(media_hash=media_hash, owner=owner, metadata=metadata)
+        transaction_finished = perf_counter()
+        registration_metrics = {
+            "hash_generation_ms": round((hash_finished - started) * 1000, 3),
+            "transaction_confirmation_ms": round((transaction_finished - hash_finished) * 1000, 3),
+        }
+        if record.metadata.get("registration_metrics") == registration_metrics:
+            return record
+        return ProvenanceRecord(
+            media_hash=record.media_hash,
+            owner=record.owner,
+            timestamp=record.timestamp,
+            metadata={**record.metadata, "registration_metrics": registration_metrics},
+            transaction_id=record.transaction_id,
+            block_number=record.block_number,
+            chain_id=record.chain_id,
+        )
 
     def verify(self, content: bytes, file_name: str, reference_hash: str | None = None) -> VerificationReport:
+        verification_started = perf_counter()
         media_hash = sha256_bytes(content)
+        hash_finished = perf_counter()
         blockchain_result, provenance_record = self.provenance.verify(media_hash)
+        blockchain_finished = perf_counter()
         reference_record = self.provenance.lookup(reference_hash) if reference_hash else None
         reference_result = self._compare_reference(media_hash, reference_hash, reference_record)
         reference_profile = self._select_reference_profile(provenance_record, reference_record)
         metadata_result = self.metadata_analyzer.analyze(content, file_name, reference_profile=reference_profile)
+        metadata_finished = perf_counter()
         ai_result = self.ai_analyzer.analyze(content)
+        ai_finished = perf_counter()
         trust_result = self.trust_engine.score(
             blockchain=blockchain_result,
             metadata=metadata_result,
             ai=ai_result,
         )
+        trust_finished = perf_counter()
 
         return VerificationReport(
             file_name=file_name,
@@ -67,6 +100,14 @@ class VerificationPipeline:
             trust=trust_result,
             provenance_record=provenance_record.to_dict() if provenance_record else None,
             reference_record=reference_record.to_dict() if reference_record else None,
+            system_metrics=SystemMetrics(
+                hash_generation_ms=(hash_finished - verification_started) * 1000,
+                blockchain_lookup_ms=(blockchain_finished - hash_finished) * 1000,
+                metadata_analysis_ms=(metadata_finished - blockchain_finished) * 1000,
+                ai_analysis_ms=(ai_finished - metadata_finished) * 1000,
+                trust_scoring_ms=(trust_finished - ai_finished) * 1000,
+                total_verification_ms=(trust_finished - verification_started) * 1000,
+            ),
             pipeline=self.stages,
         )
 

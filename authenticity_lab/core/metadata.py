@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import struct
 
 from authenticity_lab.core.models import EvidenceFactor, LayerResult
 
@@ -12,7 +13,7 @@ class MetadataAnalyzer:
         try:
             from PIL import Image, ExifTags
         except ImportError:
-            return {"file_name": file_name, "byte_size": len(content), "parser": "unavailable"}
+            return self._inspect_profile_without_pillow(content, file_name)
 
         raw: dict = {"file_name": file_name, "byte_size": len(content)}
         try:
@@ -47,25 +48,14 @@ class MetadataAnalyzer:
         try:
             from PIL import Image
         except ImportError:
-            return LayerResult(
-                layer="Metadata Integrity",
-                status="PARTIAL",
-                score=0.5,
-                summary="Pillow is not installed, so only byte-level metadata analysis is available.",
-                factors=(
-                    EvidenceFactor(
-                        name="Image parser",
-                        status="UNAVAILABLE",
-                        explanation="Install Pillow to inspect image format, dimensions, and EXIF tags.",
-                        score=0.5,
-                    ),
-                ),
-                raw={"file_name": file_name, "byte_size": len(content)},
-            )
+            return self._analyze_profile(self._inspect_profile_without_pillow(content, file_name), file_name, reference_profile)
 
         factors: list[EvidenceFactor] = []
         raw = self.inspect_profile(content, file_name)
+        return self._analyze_profile(raw, file_name, reference_profile)
 
+    def _analyze_profile(self, raw: dict, file_name: str, reference_profile: dict | None = None) -> LayerResult:
+        factors: list[EvidenceFactor] = []
         if "parser_error" in raw:
             return LayerResult(
                 layer="Metadata Integrity",
@@ -212,6 +202,92 @@ class MetadataAnalyzer:
             raw=raw,
         )
 
+    def _inspect_profile_without_pillow(self, content: bytes, file_name: str) -> dict:
+        raw: dict = {
+            "file_name": file_name,
+            "byte_size": len(content),
+            "parser": "standard-library-signature",
+            "exif": {},
+            "exif_tag_count": 0,
+        }
+
+        try:
+            if content.startswith(b"\x89PNG\r\n\x1a\n"):
+                width, height = struct.unpack(">II", content[16:24])
+                raw.update(
+                    {
+                        "format": "PNG",
+                        "mode": "unknown",
+                        "width": width,
+                        "height": height,
+                        "megapixels": round((width * height) / 1_000_000, 4),
+                    }
+                )
+                return raw
+
+            if content.startswith(b"\xff\xd8"):
+                width, height = self._jpeg_dimensions(content)
+                raw.update(
+                    {
+                        "format": "JPEG",
+                        "mode": "unknown",
+                        "width": width,
+                        "height": height,
+                        "megapixels": round((width * height) / 1_000_000, 4),
+                    }
+                )
+                raw["jpeg_quality_indicator"] = self._jpeg_quality_indicator_from_dimensions(width, height, len(content))
+                return raw
+
+            raw["parser_error"] = "Unsupported image signature without Pillow installed."
+            return raw
+        except Exception as exc:
+            raw["parser_error"] = str(exc)
+            return raw
+
+    def _jpeg_dimensions(self, content: bytes) -> tuple[int, int]:
+        index = 2
+        while index + 9 < len(content):
+            if content[index] != 0xFF:
+                index += 1
+                continue
+
+            marker = content[index + 1]
+            index += 2
+            if marker in {0xD8, 0xD9}:
+                continue
+            if index + 2 > len(content):
+                break
+
+            segment_length = int.from_bytes(content[index : index + 2], "big")
+            if segment_length < 2:
+                break
+
+            if marker in {
+                0xC0,
+                0xC1,
+                0xC2,
+                0xC3,
+                0xC5,
+                0xC6,
+                0xC7,
+                0xC9,
+                0xCA,
+                0xCB,
+                0xCD,
+                0xCE,
+                0xCF,
+            }:
+                if index + 7 > len(content):
+                    break
+                height = int.from_bytes(content[index + 3 : index + 5], "big")
+                width = int.from_bytes(content[index + 5 : index + 7], "big")
+                return width, height
+
+            index += segment_length
+
+        raise ValueError("JPEG dimensions were not found in SOF markers.")
+
     def _compare_reference(self, current: dict, reference: dict) -> tuple[EvidenceFactor, ...]:
         factors: list[EvidenceFactor] = []
         current_format = current.get("format")
@@ -259,7 +335,10 @@ class MetadataAnalyzer:
         return tuple(factors)
 
     def _jpeg_quality_indicator(self, image: Image.Image, byte_size: int) -> dict:
-        megapixels = max((image.width * image.height) / 1_000_000, 0.01)
+        return self._jpeg_quality_indicator_from_dimensions(image.width, image.height, byte_size)
+
+    def _jpeg_quality_indicator_from_dimensions(self, width: int, height: int, byte_size: int) -> dict:
+        megapixels = max((width * height) / 1_000_000, 0.01)
         bytes_per_megapixel = byte_size / megapixels
 
         if bytes_per_megapixel < 90_000:
