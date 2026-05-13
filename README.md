@@ -48,9 +48,38 @@ AI_ANALYZER=pretrained python3 -m authenticity_lab.web.app
 
 Expected behavior: exact provenance should miss because the edited file has a different hash, while selected-reference comparison should show a derivative check and metadata drift.
 
+Additional fixture checks:
+
+- `samples/deepfake_proxy.png` demonstrates missing provenance plus suspicious AI-layer evidence.
+- `samples/unknown_unregistered.png` demonstrates an unregistered image whose low trust comes primarily from absent provenance rather than a strongly suspicious visual signal.
+
 ## Blockchain Notes
 
 The default app uses a local research ledger in `data/provenance_records.json` so the demo works without external services. The Solidity contract in [contracts/MediaProvenance.sol](contracts/MediaProvenance.sol) and the Web3 adapter in [authenticity_lab/adapters/web3_gateway.py](authenticity_lab/adapters/web3_gateway.py) provide the intended Ganache integration point.
+
+To compile and deploy the Solidity contract to Ganache:
+
+```bash
+npm install
+npm run compile
+npm run deploy:ganache
+```
+
+The deployment script reads `GANACHE_RPC_URL`, `GANACHE_CHAIN_ID`, and `GANACHE_PRIVATE_KEY` when provided. Defaults target Ganache on `http://127.0.0.1:7545`.
+
+To run the Flask app against the deployed Ganache contract instead of the local JSON ledger:
+
+```bash
+PROVENANCE_GATEWAY=ganache \
+GANACHE_CONTRACT_ADDRESS=<deployed-contract-address> \
+python3 -m authenticity_lab.web.app
+```
+
+Optional overrides:
+
+- `GANACHE_RPC_URL`
+- `GANACHE_ACCOUNT`
+- `GANACHE_CONTRACT_ABI_PATH`
 
 ## Research Caveat
 
@@ -73,6 +102,8 @@ Generate the current fixture report:
 ```bash
 python3 scripts/run_evaluation.py
 ```
+
+The report includes AI accuracy/precision/recall/F1, verification latency metrics, provenance success rate, tamper detection rate, and trust-score consistency.
 
 Outputs:
 

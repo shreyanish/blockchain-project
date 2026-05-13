@@ -35,6 +35,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Hardhat build output
+artifacts/
+cache/
+
 # Test and coverage
 .pytest_cache/
 .coverage

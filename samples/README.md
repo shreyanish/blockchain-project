@@ -52,4 +52,34 @@ Expected behavior:
 - synthetic-looking visual evidence
 - explainable AI baseline factors such as texture, luminance, and contrast
 
+## 4. Deepfake Proxy
+
+File: `deepfake_proxy.png`
+
+Recommended flow:
+
+1. Upload this file.
+2. Click **Verify** without registering it.
+
+Expected behavior:
+
+- no provenance record
+- suspicious AI baseline output
+- low final trust score
+
+## 5. Unknown Unregistered Image
+
+File: `unknown_unregistered.png`
+
+Recommended flow:
+
+1. Upload this file.
+2. Click **Verify** without registering it.
+
+Expected behavior:
+
+- no provenance record
+- unregistered authenticity state
+- low trust because provenance is absent even when visual evidence is not strongly suspicious
+
 These are generated demo fixtures, not a real deepfake benchmark.

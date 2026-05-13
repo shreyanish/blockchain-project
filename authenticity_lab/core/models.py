@@ -68,6 +68,26 @@ class ProvenanceRecord:
 
 
 @dataclass(frozen=True)
+class SystemMetrics:
+    hash_generation_ms: float
+    blockchain_lookup_ms: float
+    metadata_analysis_ms: float
+    ai_analysis_ms: float
+    trust_scoring_ms: float
+    total_verification_ms: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "hash_generation_ms": round(self.hash_generation_ms, 3),
+            "blockchain_lookup_ms": round(self.blockchain_lookup_ms, 3),
+            "metadata_analysis_ms": round(self.metadata_analysis_ms, 3),
+            "ai_analysis_ms": round(self.ai_analysis_ms, 3),
+            "trust_scoring_ms": round(self.trust_scoring_ms, 3),
+            "total_verification_ms": round(self.total_verification_ms, 3),
+        }
+
+
+@dataclass(frozen=True)
 class VerificationReport:
     file_name: str
     media_hash: str
@@ -79,6 +99,7 @@ class VerificationReport:
     trust: LayerResult
     provenance_record: dict[str, Any] | None
     reference_record: dict[str, Any] | None
+    system_metrics: SystemMetrics
     pipeline: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
@@ -93,5 +114,6 @@ class VerificationReport:
             "trust": self.trust.to_dict(),
             "provenance_record": self.provenance_record,
             "reference_record": self.reference_record,
+            "system_metrics": self.system_metrics.to_dict(),
             "pipeline": list(self.pipeline),
         }

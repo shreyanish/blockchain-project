@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from flask import Flask, jsonify, render_template, request
 
+from authenticity_lab.adapters.web3_gateway import GanacheProvenanceGateway
 from authenticity_lab.config import load_config
 from authenticity_lab.core.ai import build_authenticity_analyzer
 from authenticity_lab.core.pipeline import VerificationPipeline
-from authenticity_lab.core.provenance import LocalResearchLedger, ProvenanceService
+from authenticity_lab.core.provenance import LocalResearchLedger, ProvenanceGateway, ProvenanceService
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
     config = load_config()
-    ledger = LocalResearchLedger(config.ledger_path)
+    gateway = _build_provenance_gateway(config)
     pipeline = VerificationPipeline(
-        ProvenanceService(ledger),
+        ProvenanceService(gateway),
         ai_analyzer=build_authenticity_analyzer(config.ai_analyzer),
     )
 
@@ -51,6 +55,29 @@ def create_app() -> Flask:
         return jsonify(report.to_dict())
 
     return app
+
+
+def _build_provenance_gateway(config) -> ProvenanceGateway:
+    if config.provenance_gateway.strip().lower() != "ganache":
+        return LocalResearchLedger(config.ledger_path)
+
+    if not config.ganache_contract_address:
+        raise RuntimeError("GANACHE_CONTRACT_ADDRESS is required when PROVENANCE_GATEWAY=ganache.")
+
+    artifact_path = Path(config.ganache_contract_abi_path)
+    if not artifact_path.exists():
+        raise RuntimeError(
+            f"Ganache contract ABI artifact not found at {artifact_path}. Run `npm run compile` first."
+        )
+
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    abi = artifact.get("abi", artifact)
+    return GanacheProvenanceGateway(
+        rpc_url=config.ganache_rpc_url,
+        contract_address=config.ganache_contract_address,
+        contract_abi=abi,
+        account=config.ganache_account,
+    )
 
 
 if __name__ == "__main__":

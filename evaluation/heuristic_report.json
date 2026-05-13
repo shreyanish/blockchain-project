@@ -1,8 +1,33 @@
 {
   "ai_mode": "heuristic",
   "summary": {
-    "cases": 3,
-    "passed": 3
+    "cases": 5,
+    "passed": 5
+  },
+  "metrics": {
+    "ai": {
+      "accuracy": 0.6,
+      "precision": 1.0,
+      "recall": 0.3333,
+      "f1_score": 0.5,
+      "true_positive": 1,
+      "true_negative": 2,
+      "false_positive": 0,
+      "false_negative": 2
+    },
+    "system": {
+      "mean_hash_generation_ms": 0.021,
+      "mean_blockchain_lookup_ms": 0.067,
+      "mean_metadata_analysis_ms": 1.936,
+      "mean_ai_analysis_ms": 6.072,
+      "mean_trust_scoring_ms": 0.007,
+      "mean_total_verification_ms": 8.102
+    },
+    "framework": {
+      "trust_score_consistency": 1.0,
+      "provenance_verification_success_rate": 1.0,
+      "tamper_detection_rate": 1.0
+    }
   },
   "cases": [
     {
@@ -10,7 +35,8 @@
       "file": "samples/authentic_reference.png",
       "expected": {
         "blockchain": "VERIFIED",
-        "metadata": "CONSISTENT"
+        "metadata": "CONSISTENT",
+        "trust": "HIGH_TRUST"
       },
       "observed": {
         "blockchain": "VERIFIED",
@@ -26,6 +52,16 @@
         "ai": 0.6563,
         "trust": 0.8375
       },
+      "system_metrics": {
+        "hash_generation_ms": 0.022,
+        "blockchain_lookup_ms": 0.061,
+        "metadata_analysis_ms": 2.622,
+        "ai_analysis_ms": 6.636,
+        "trust_scoring_ms": 0.009,
+        "total_verification_ms": 9.35
+      },
+      "ai_ground_truth": "authentic",
+      "framework_ground_truth": "registered_authentic",
       "passed": true,
       "ai_model": "heuristic-baseline",
       "ai_mode": "inference",
@@ -37,7 +73,8 @@
       "expected": {
         "blockchain": "UNREGISTERED",
         "reference": "DERIVATIVE_CHECK",
-        "metadata": "PARTIAL"
+        "metadata": "PARTIAL",
+        "trust": "LOW_TRUST"
       },
       "observed": {
         "blockchain": "UNREGISTERED",
@@ -53,16 +90,100 @@
         "ai": 0.6315,
         "trust": 0.3865
       },
+      "system_metrics": {
+        "hash_generation_ms": 0.018,
+        "blockchain_lookup_ms": 0.068,
+        "metadata_analysis_ms": 0.154,
+        "ai_analysis_ms": 6.859,
+        "trust_scoring_ms": 0.008,
+        "total_verification_ms": 7.106
+      },
+      "ai_ground_truth": "manipulated",
+      "framework_ground_truth": "tampered_derivative",
       "passed": true,
       "ai_model": "heuristic-baseline",
       "ai_mode": "inference",
       "ai_limitations": "Explainable baseline only; not trained for deepfake detection."
     },
     {
-      "name": "synthetic-unknown",
+      "name": "deepfake-synthetic-proxy",
+      "file": "samples/deepfake_proxy.png",
+      "expected": {
+        "blockchain": "UNREGISTERED",
+        "ai": "SUSPICIOUS",
+        "trust": "LOW_TRUST"
+      },
+      "observed": {
+        "blockchain": "UNREGISTERED",
+        "reference": null,
+        "metadata": "CONSISTENT",
+        "ai": "SUSPICIOUS",
+        "trust": "LOW_TRUST"
+      },
+      "scores": {
+        "blockchain": 0.0,
+        "reference": null,
+        "metadata": 0.75,
+        "ai": 0.3955,
+        "trust": 0.3082
+      },
+      "system_metrics": {
+        "hash_generation_ms": 0.015,
+        "blockchain_lookup_ms": 0.07,
+        "metadata_analysis_ms": 2.184,
+        "ai_analysis_ms": 5.478,
+        "trust_scoring_ms": 0.005,
+        "total_verification_ms": 7.752
+      },
+      "ai_ground_truth": "manipulated",
+      "framework_ground_truth": "synthetic_unregistered",
+      "passed": true,
+      "ai_model": "heuristic-baseline",
+      "ai_mode": "inference",
+      "ai_limitations": "Explainable baseline only; not trained for deepfake detection."
+    },
+    {
+      "name": "unknown-unregistered-image",
+      "file": "samples/unknown_unregistered.png",
+      "expected": {
+        "blockchain": "UNREGISTERED",
+        "trust": "LOW_TRUST"
+      },
+      "observed": {
+        "blockchain": "UNREGISTERED",
+        "reference": null,
+        "metadata": "CONSISTENT",
+        "ai": "UNCERTAIN",
+        "trust": "LOW_TRUST"
+      },
+      "scores": {
+        "blockchain": 0.0,
+        "reference": null,
+        "metadata": 0.75,
+        "ai": 0.4766,
+        "trust": 0.3407
+      },
+      "system_metrics": {
+        "hash_generation_ms": 0.025,
+        "blockchain_lookup_ms": 0.062,
+        "metadata_analysis_ms": 2.166,
+        "ai_analysis_ms": 5.616,
+        "trust_scoring_ms": 0.007,
+        "total_verification_ms": 7.875
+      },
+      "ai_ground_truth": "authentic",
+      "framework_ground_truth": "unknown_unregistered",
+      "passed": true,
+      "ai_model": "heuristic-baseline",
+      "ai_mode": "inference",
+      "ai_limitations": "Explainable baseline only; not trained for deepfake detection."
+    },
+    {
+      "name": "synthetic-stress-unknown",
       "file": "samples/synthetic_stress_test.png",
       "expected": {
-        "blockchain": "UNREGISTERED"
+        "blockchain": "UNREGISTERED",
+        "trust": "LOW_TRUST"
       },
       "observed": {
         "blockchain": "UNREGISTERED",
@@ -78,6 +199,16 @@
         "ai": 0.7273,
         "trust": 0.4409
       },
+      "system_metrics": {
+        "hash_generation_ms": 0.025,
+        "blockchain_lookup_ms": 0.073,
+        "metadata_analysis_ms": 2.552,
+        "ai_analysis_ms": 5.771,
+        "trust_scoring_ms": 0.006,
+        "total_verification_ms": 8.426
+      },
+      "ai_ground_truth": "manipulated",
+      "framework_ground_truth": "synthetic_unregistered",
       "passed": true,
       "ai_model": "heuristic-baseline",
       "ai_mode": "inference",

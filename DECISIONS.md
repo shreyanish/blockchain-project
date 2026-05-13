@@ -165,3 +165,21 @@ This log records major implementation decisions, tradeoffs, rejected alternative
 **Rejected alternative:** Keep the pipeline steps as static orientation. Rejected because the report cards already expose the verification layers with status, score, and rationale.
 
 **Rationale:** The UI should keep only elements that actively support the task: upload/register/verify, selected reference, evidence report, and provenance explorer.
+
+## Decision 14: Add Minimal Hardhat/Ganache Tooling
+
+**Choice:** Add a small Hardhat config and deploy script for `MediaProvenance.sol`, targeting Ganache by default.
+
+**Tradeoff:** The default Python app still uses the local research ledger for frictionless demos, but the Solidity contract now has a repeatable local-chain deployment path.
+
+**Rejected alternative:** Make Ganache mandatory for every app run. Rejected because the prototype should remain easy to demonstrate without running multiple services.
+
+**Rationale:** This completes the blockchain technology constraint while preserving the project’s educational, local-first workflow.
+
+## Decision 15: Expand Evaluation Metrics and Required Cases
+
+**Choice:** Add fixture cases for a deepfake/synthetic proxy and an unknown unregistered image, then report AI classification metrics, system timing metrics, and framework-level consistency rates.
+
+**Tradeoff:** The fixture dataset is still intentionally small and synthetic, so the metrics demonstrate evaluation structure rather than benchmark-grade model validity.
+
+**Rationale:** The north-star evaluation section asks for more than pass/fail tests. Explicit metrics make the framework easier to discuss academically without overstating AI accuracy.
