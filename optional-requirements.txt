@@ -1,0 +1,4 @@
+# Optional heavier AI dependencies.
+# Install only if you want AI_ANALYZER=pretrained.
+torch>=2.3
+torchvision>=0.18

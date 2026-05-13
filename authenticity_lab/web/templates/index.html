@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authenticity Verification Lab</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">AV</div>
+          <div>
+            <strong>Authenticity Lab</strong>
+            <span>Local provenance · explainable verification</span>
+          </div>
+        </div>
+        <div class="network-pill">Local Ledger</div>
+      </header>
+
+      <section class="stage">
+        <aside class="control-panel">
+          <form id="media-form" class="upload-card">
+            <div class="card-head">
+              <p class="eyebrow">Media Intake</p>
+              <h1>Verify</h1>
+            </div>
+            <label>
+              Owner
+              <input name="owner" value="research-demo" autocomplete="off">
+            </label>
+            <label>
+              Image
+              <input name="media" type="file" accept="image/*" required>
+            </label>
+            <label>
+              Reference
+              <select name="reference_hash" id="reference-select">
+                <option value="">No selected reference</option>
+              </select>
+            </label>
+            <div class="actions">
+              <button type="button" data-action="register">Register</button>
+              <button type="button" data-action="verify">Verify</button>
+            </div>
+          </form>
+        </aside>
+
+        <section class="report-panel">
+          <section id="report" class="report empty">
+            <div class="empty-orb">SHA</div>
+            <h2>No report loaded</h2>
+            <p>Choose a sample image, then register or verify.</p>
+          </section>
+        </section>
+
+        <aside class="ledger-panel">
+          <header class="ledger-header">
+            <div>
+              <p class="eyebrow">Collection</p>
+              <h2>Registered Media</h2>
+            </div>
+            <button type="button" id="refresh-ledger">Refresh</button>
+          </header>
+          <div id="ledger-records" class="ledger-empty">No records</div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module">
+      const form = document.querySelector("#media-form");
+      const report = document.querySelector("#report");
+      const referenceSelect = document.querySelector("#reference-select");
+      const ledgerRecords = document.querySelector("#ledger-records");
+      const refreshLedger = document.querySelector("#refresh-ledger");
+      let blockie = null;
+
+      import("https://esm.sh/blo@2.0.0")
+        .then((module) => {
+          blockie = module.blo;
+          loadLedger();
+        })
+        .catch(() => {
+          blockie = null;
+        });
+
+      function percent(value) {
+        return `${Math.round(value * 100)}%`;
+      }
+
+      function shortHash(hash) {
+        return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+      }
+
+      function hashAddress(hash) {
+        return `0x${hash.slice(0, 40)}`;
+      }
+
+      function identicon(hash) {
+        const address = hashAddress(hash);
+        if (!blockie) {
+          return `<div class="hash-avatar fallback">${hash.slice(0, 2).toUpperCase()}</div>`;
+        }
+        return `<img class="hash-avatar" src="${blockie(address)}" alt="Identicon for ${address}">`;
+      }
+
+      function factorList(factors) {
+        return factors.map((factor) => `
+          <li>
+            <div>
+              <strong>${factor.name}</strong>
+              <span>${factor.status}</span>
+            </div>
+            <p>${factor.explanation}</p>
+          </li>
+        `).join("");
+      }
+
+      function layerMeta(layer) {
+        if (!layer.raw || !layer.raw.model) return "";
+        const predictions = layer.raw.top_predictions
+          ? `<pre>${JSON.stringify(layer.raw.top_predictions, null, 2)}</pre>`
+          : "";
+        return `
+          <aside class="layer-meta">
+            <div><strong>Model</strong><span>${layer.raw.model}</span></div>
+            <div><strong>Mode</strong><span>${layer.raw.mode || "inference"}</span></div>
+            <p>${layer.raw.limitations || layer.raw.note || ""}</p>
+            ${predictions}
+          </aside>
+        `;
+      }
+
+      function layerCard(layer) {
+        if (!layer) return "";
+        return `
+          <article class="layer">
+            <header>
+              <div>
+                <h3>${layer.layer}</h3>
+                <span>${layer.status}</span>
+              </div>
+              <div class="mini-score" style="--score:${Math.round(layer.score * 100)}%">${percent(layer.score)}</div>
+            </header>
+            <p>${layer.summary}</p>
+            ${layerMeta(layer)}
+            <ul>${factorList(layer.factors)}</ul>
+          </article>
+        `;
+      }
+
+      function renderLedger(records) {
+        const selected = referenceSelect.value;
+        referenceSelect.innerHTML = `<option value="">No selected reference</option>`;
+        if (!records.length) {
+          ledgerRecords.className = "ledger-empty";
+          ledgerRecords.innerHTML = "No records";
+          return;
+        }
+
+        ledgerRecords.className = "ledger-grid";
+        ledgerRecords.innerHTML = records.map((record) => `
+          <article class="ledger-card">
+            ${identicon(record.media_hash)}
+            <div class="ledger-copy">
+              <header>
+                <strong>${record.metadata.file_name || "registered media"}</strong>
+                <span>Block ${record.block_number}</span>
+              </header>
+              <code>${shortHash(record.media_hash)}</code>
+              <footer>
+                <span>${record.owner}</span>
+                <span>${record.chain_id}</span>
+              </footer>
+            </div>
+          </article>
+        `).join("");
+
+        records.forEach((record) => {
+          const option = document.createElement("option");
+          option.value = record.media_hash;
+          option.textContent = `${record.metadata.file_name || "registered media"} | ${shortHash(record.media_hash)}`;
+          referenceSelect.appendChild(option);
+        });
+        referenceSelect.value = selected;
+      }
+
+      async function loadLedger() {
+        const response = await fetch("/api/provenance");
+        const payload = await response.json();
+        renderLedger(payload.records || []);
+      }
+
+      function render(payload) {
+        const data = payload.verification || payload;
+        report.className = "report";
+        report.innerHTML = `
+          <section class="report-hero">
+            <div>
+              <p class="eyebrow">Verification Report</p>
+              <h2>${data.file_name}</h2>
+              <code>${data.media_hash}</code>
+            </div>
+            <div class="trust-token">
+              <span>${percent(data.trust.score)}</span>
+              <strong>${data.trust.status}</strong>
+            </div>
+          </section>
+          <section class="layers">
+            ${layerCard(data.blockchain)}
+            ${layerCard(data.reference)}
+            ${layerCard(data.metadata)}
+            ${layerCard(data.ai)}
+            ${layerCard(data.trust)}
+          </section>
+          <section class="record-strip">
+            <article>
+              <h3>Matched Provenance</h3>
+              <pre>${JSON.stringify(data.provenance_record || { status: "No matching record" }, null, 2)}</pre>
+            </article>
+            <article>
+              <h3>Selected Reference</h3>
+              <pre>${JSON.stringify(data.reference_record || { status: "No selected reference" }, null, 2)}</pre>
+            </article>
+          </section>
+        `;
+      }
+
+      async function submit(action) {
+        const body = new FormData(form);
+        const response = await fetch(`/api/${action}`, { method: "POST", body });
+        const payload = await response.json();
+        if (!response.ok) {
+          report.className = "report empty";
+          report.innerHTML = `<div class="empty-orb">ERR</div><h2>Request failed</h2><p>${payload.error || "Try again."}</p>`;
+          return;
+        }
+        render(payload);
+        await loadLedger();
+      }
+
+      document.querySelectorAll("button[data-action]").forEach((button) => {
+        button.addEventListener("click", () => submit(button.dataset.action));
+      });
+      refreshLedger.addEventListener("click", loadLedger);
+      loadLedger();
+    </script>
+  </body>
+</html>

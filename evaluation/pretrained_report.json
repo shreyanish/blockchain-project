@@ -1,0 +1,87 @@
+{
+  "ai_mode": "pretrained",
+  "summary": {
+    "cases": 3,
+    "passed": 3
+  },
+  "cases": [
+    {
+      "name": "registered-original",
+      "file": "samples/authentic_reference.png",
+      "expected": {
+        "blockchain": "VERIFIED",
+        "metadata": "CONSISTENT"
+      },
+      "observed": {
+        "blockchain": "VERIFIED",
+        "reference": "EXACT_MATCH",
+        "metadata": "CONSISTENT",
+        "ai": "UNCERTAIN",
+        "trust": "HIGH_TRUST"
+      },
+      "scores": {
+        "blockchain": 1.0,
+        "reference": 1.0,
+        "metadata": 0.875,
+        "ai": 0.6563,
+        "trust": 0.8375
+      },
+      "passed": true,
+      "ai_model": "heuristic-baseline",
+      "ai_mode": "inference",
+      "ai_limitations": "Explainable baseline only; not trained for deepfake detection."
+    },
+    {
+      "name": "edited-reference-comparison",
+      "file": "samples/edited_variant.jpg",
+      "expected": {
+        "blockchain": "UNREGISTERED",
+        "reference": "DERIVATIVE_CHECK",
+        "metadata": "PARTIAL"
+      },
+      "observed": {
+        "blockchain": "UNREGISTERED",
+        "reference": "DERIVATIVE_CHECK",
+        "metadata": "PARTIAL",
+        "ai": "UNCERTAIN",
+        "trust": "LOW_TRUST"
+      },
+      "scores": {
+        "blockchain": 0.0,
+        "reference": 0.65,
+        "metadata": 0.6695,
+        "ai": 0.6315,
+        "trust": 0.3865
+      },
+      "passed": true,
+      "ai_model": "heuristic-baseline",
+      "ai_mode": "inference",
+      "ai_limitations": "Explainable baseline only; not trained for deepfake detection."
+    },
+    {
+      "name": "synthetic-unknown",
+      "file": "samples/synthetic_stress_test.png",
+      "expected": {
+        "blockchain": "UNREGISTERED"
+      },
+      "observed": {
+        "blockchain": "UNREGISTERED",
+        "reference": null,
+        "metadata": "CONSISTENT",
+        "ai": "UNCERTAIN",
+        "trust": "LOW_TRUST"
+      },
+      "scores": {
+        "blockchain": 0.0,
+        "reference": null,
+        "metadata": 0.75,
+        "ai": 0.7273,
+        "trust": 0.4409
+      },
+      "passed": true,
+      "ai_model": "heuristic-baseline",
+      "ai_mode": "inference",
+      "ai_limitations": "Explainable baseline only; not trained for deepfake detection."
+    }
+  ]
+}

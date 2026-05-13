@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Authenticity Lab{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-title">Authenticity Lab</span>
+          <span class="brand-subtitle">Provenance · Verification · Trust</span>
+        </div>
+        <div class="topbar-right">Local Ledger</div>
+      </header>
+
+      <section class="stage">
+        <!-- Left Panel: Media Intake -->
+        <aside class="panel control-panel">
+          <div class="panel-header">
+            <div class="panel-label">Media Intake</div>
+            <h2 class="panel-title">Register & Verify</h2>
+          </div>
+          <div class="panel-body">
+            <form id="media-form">
+              <div class="form-group">
+                <label for="owner-input">Owner</label>
+                <input id="owner-input" name="owner" value="research-demo" autocomplete="off">
+              </div>
+
+              <div class="form-group">
+                <label for="media-input">Image</label>
+                <input id="media-input" name="media" type="file" accept="image/*" required>
+                <div id="filename-display" class="filename-display"></div>
+              </div>
+
+              <div class="form-group">
+                <label for="reference-select">Reference</label>
+                <select id="reference-select" name="reference_hash">
+                  <option value="">No selected reference</option>
+                </select>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" id="btn-register">Register</button>
+                <button type="button" class="btn" id="btn-verify">Verify</button>
+              </div>
+            </form>
+          </div>
+        </aside>
+
+        <!-- Center Panel: Verification Report -->
+        <section class="panel report-panel">
+          <div id="report-content" class="report-container">
+            {% block report_content %}
+            <div class="report-empty" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center;">
+              <div class="empty-icon">SHA</div>
+              <h2 class="empty-title">No report loaded</h2>
+              <p class="empty-description">Choose a sample image, then register or verify.</p>
+            </div>
+            {% endblock %}
+          </div>
+        </section>
+
+        <!-- Right Panel: Collection -->
+        <aside class="panel ledger-panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-label">Collection</div>
+              <h2 class="panel-title">Registered Media</h2>
+            </div>
+            <button type="button" class="ledger-refresh" id="refresh-ledger">Refresh</button>
+          </div>
+          <div class="panel-body">
+            <div id="ledger-records" class="ledger-empty">No records</div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module">
+      const form = document.querySelector("#media-form");
+      const mediaInput = document.querySelector("#media-input");
+      const filenameDisplay = document.querySelector("#filename-display");
+      const referenceSelect = document.querySelector("#reference-select");
+      const ledgerRecords = document.querySelector("#ledger-records");
+      const refreshLedger = document.querySelector("#refresh-ledger");
+      const reportContent = document.querySelector("#report-content");
+      const btnRegister = document.querySelector("#btn-register");
+      const btnVerify = document.querySelector("#btn-verify");
+
+      let blockie = null;
+
+      import("https://esm.sh/blo@2.0.0")
+        .then((module) => {
+          blockie = module.blo;
+          loadLedger();
+        })
+        .catch(() => {
+          blockie = null;
+        });
+
+      // Update filename display
+      mediaInput.addEventListener("change", () => {
+        filenameDisplay.textContent = mediaInput.files[0]?.name || "";
+      });
+
+      // Register button
+      btnRegister.addEventListener("click", async () => {
+        if (!mediaInput.files[0]) return;
+        btnRegister.disabled = true;
+        try {
+          await registerMedia();
+        } finally {
+          btnRegister.disabled = false;
+        }
+      });
+
+      // Verify button
+      btnVerify.addEventListener("click", async () => {
+        if (!mediaInput.files[0]) return;
+        btnVerify.disabled = true;
+        try {
+          await verifyMedia();
+        } finally {
+          btnVerify.disabled = false;
+        }
+      });
+
+      // Refresh ledger button
+      refreshLedger.addEventListener("click", loadLedger);
+
+      function percent(value) {
+        return `${Math.round(value * 100)}%`;
+      }
+
+      function shortHash(hash) {
+        return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+      }
+
+      function hashAddress(hash) {
+        return `0x${hash.slice(0, 40)}`;
+      }
+
+      function getTrustSymbol(trustLevel) {
+        switch (trustLevel) {
+          case "HIGH_TRUST":
+            return "▲";
+          case "MEDIUM_TRUST":
+            return "◆";
+          case "LOW_TRUST":
+            return "▼";
+          case "UNREGISTERED":
+            return "○";
+          case "PARTIAL":
+            return "◑";
+          case "UNCERTAIN":
+          case "DERIVATIVE_CHECK":
+            return "⟳";
+          default:
+            return "?";
+        }
+      }
+
+      function getTrustClass(trustLevel) {
+        if (trustLevel === "HIGH_TRUST") return "high";
+        if (trustLevel === "LOW_TRUST") return "low";
+        return "medium";
+      }
+
+      function identicon(hash) {
+        if (!blockie) return null;
+        try {
+          return blockie(hashAddress(hash), 8);
+        } catch {
+          return null;
+        }
+      }
+
+      async function registerMedia() {
+        const formData = new FormData(form);
+        try {
+          const response = await fetch("/api/register", {
+            method: "POST",
+            body: formData,
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            alert(result.error || "Registration failed");
+            return;
+          }
+          loadLedger();
+          displayReport(result.verification);
+        } catch (error) {
+          console.error("Registration error:", error);
+          alert("Registration failed");
+        }
+      }
+
+      async function verifyMedia() {
+        const formData = new FormData(form);
+        try {
+          const response = await fetch("/api/verify", {
+            method: "POST",
+            body: formData,
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            alert(result.error || "Verification failed");
+            return;
+          }
+          displayReport(result);
+        } catch (error) {
+          console.error("Verification error:", error);
+          alert("Verification failed");
+        }
+      }
+
+      async function loadLedger() {
+        try {
+          const response = await fetch("/api/provenance");
+          const result = await response.json();
+          const records = result.records || [];
+
+          if (records.length === 0) {
+            ledgerRecords.innerHTML =
+              '<div class="ledger-empty">No records</div>';
+            referenceSelect.innerHTML =
+              '<option value="">No selected reference</option>';
+            return;
+          }
+
+          // Populate reference select
+          referenceSelect.innerHTML =
+            '<option value="">No selected reference</option>';
+          records.forEach((record) => {
+            const option = document.createElement("option");
+            option.value = record.media_hash;
+            const fileName = record.metadata?.file_name || "unknown";
+            option.textContent = `${fileName} (block ${record.block_number})`;
+            referenceSelect.appendChild(option);
+          });
+
+          // Render ledger records
+          ledgerRecords.innerHTML = "";
+          records.forEach((record) => {
+            const el = document.createElement("div");
+            el.className = "ledger-record";
+
+            const imgSrc = identicon(record.media_hash);
+            const img = document.createElement("img");
+            img.src = imgSrc;
+            img.className = "ledger-thumbnail";
+            img.alt = record.metadata?.file_name || "media";
+
+            const content = document.createElement("div");
+            content.className = "ledger-content";
+
+            const filename = document.createElement("div");
+            filename.className = "ledger-filename";
+            filename.textContent = record.metadata?.file_name || "registered media";
+
+            const meta = document.createElement("div");
+            meta.className = "ledger-meta";
+
+            const block = document.createElement("span");
+            block.className = "ledger-block";
+            block.textContent = `BLOCK ${record.block_number}`;
+
+            const hash = document.createElement("span");
+            hash.className = "ledger-hash";
+            hash.textContent = shortHash(record.media_hash);
+
+            meta.appendChild(block);
+            meta.appendChild(hash);
+
+            const owner = document.createElement("div");
+            owner.className = "ledger-owner";
+            owner.textContent = `Owner: ${record.owner}`;
+
+            content.appendChild(filename);
+            content.appendChild(meta);
+            content.appendChild(owner);
+
+            el.appendChild(img);
+            el.appendChild(content);
+            ledgerRecords.appendChild(el);
+          });
+        } catch (error) {
+          console.error("Ledger load error:", error);
+        }
+      }
+
+      function displayReport(report) {
+        const html = renderReport(report);
+        reportContent.innerHTML = html;
+        
+        // Trigger count-up animation for trust score
+        const scoreElement = reportContent.querySelector(".trust-score-number");
+        if (scoreElement && scoreElement.dataset.target) {
+          animateCountUp(scoreElement);
+        }
+      }
+
+      function renderReport(report) {
+        // Extract trust info from trust layer result
+        const trustScore = report.trust?.score || 0;
+        const trustLabel = report.trust?.status || "UNCERTAIN";
+        const trustClass = getTrustClass(trustLabel);
+        const trustSymbol = getTrustSymbol(trustLabel);
+
+        let html = `
+          <div class="report-header">
+            <h1 class="report-filename">${escapeHtml(report.file_name || "Report")}</h1>
+            <div class="report-hash">${escapeHtml(report.media_hash || "")}</div>
+            <div class="report-score-bar">
+              <div class="trust-score-number" data-target="${trustScore}" data-animated="false">
+                ${Math.round(trustScore * 100)}%
+              </div>
+              <div class="trust-label ${trustClass}">
+                <span class="trust-symbol">${trustSymbol}</span>
+                ${trustLabel}
+              </div>
+            </div>
+          </div>
+          <div class="report-body">
+        `;
+
+        // Metrics Grid
+        html += '<div class="metrics-grid">';
+
+        // Blockchain Provenance
+        const blockchainResult = report.blockchain || {};
+        const blockchainScore = blockchainResult.score || 0;
+        const blockchainStatus = blockchainResult.status || "UNCERTAIN";
+        html += `
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-value">${blockchainScore >= 0.7 ? "✓" : blockchainScore >= 0.4 ? "◑" : "✗"}</div>
+              <div class="metric-status ${blockchainStatus === "MATCH" || blockchainScore >= 0.7 ? "match" : blockchainScore >= 0.4 ? "uncertain" : "mismatch"}">
+                ${blockchainStatus}
+              </div>
+            </div>
+            <div class="metric-label">Blockchain Provenance</div>
+            <div class="metric-description">
+              ${blockchainResult.summary || "Provenance verification in ledger"}
+            </div>
+          </div>
+        `;
+
+        // Metadata Integrity
+        const metadataResult = report.metadata || {};
+        const metaScore = metadataResult.score || 0;
+        const metaStatus = metadataResult.status || "UNCERTAIN";
+        html += `
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-value">${percent(metaScore)}</div>
+              <div class="metric-status ${metaScore >= 0.7 ? "match" : metaScore >= 0.4 ? "uncertain" : "mismatch"}">
+                ${metaStatus}
+              </div>
+            </div>
+            <div class="metric-label">Metadata Integrity</div>
+            <div class="metric-description">
+              ${metadataResult.summary || "EXIF and file metadata signals"}
+            </div>
+          </div>
+        `;
+
+        // AI Authenticity
+        const aiResult = report.ai || {};
+        const aiScore = aiResult.score || 0;
+        const aiStatus = aiResult.status || "UNCERTAIN";
+        html += `
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-value">${percent(aiScore)}</div>
+              <div class="metric-status ${aiScore >= 0.7 ? "match" : aiScore >= 0.4 ? "uncertain" : "mismatch"}">
+                ${aiStatus}
+              </div>
+            </div>
+            <div class="metric-label">AI Authenticity</div>
+            <div class="metric-description">
+              ${aiResult.summary || "Lightweight visual likelihood estimate"}
+            </div>
+          </div>
+        `;
+
+        // Reference Comparison
+        const refResult = report.reference;
+        const refScore = refResult?.score || 0;
+        const refStatus = refResult?.status || "NO REFERENCE";
+        html += `
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-value">${refResult ? percent(refScore) : "—"}</div>
+              <div class="metric-status ${refScore >= 0.7 ? "match" : refScore >= 0.4 ? "uncertain" : "mismatch"}">
+                ${refStatus}
+              </div>
+            </div>
+            <div class="metric-label">Reference Comparison</div>
+            <div class="metric-description">
+              ${refResult?.summary || "No reference selected for comparison"}
+            </div>
+          </div>
+        `;
+
+        html += '</div>'; // Close metrics-grid
+
+        // Final Trust Score Card
+        html += `
+          <div class="final-score-card">
+            <div class="final-score-title">Final Trust Assessment</div>
+            <div class="final-score-value">${Math.round(trustScore * 100)}%</div>
+            <div style="margin-top: 12px; font-size: 0.9rem; color: #9a9488;">
+              ${report.trust?.summary || (trustLabel === "HIGH_TRUST" 
+                ? "Image exhibits consistent signals. High confidence in authenticity." 
+                : trustLabel === "LOW_TRUST" 
+                ? "Image shows significant inconsistencies. Exercise caution." 
+                : "Mixed signals. Additional verification recommended.")}
+            </div>
+          </div>
+        `;
+
+        // Matched Provenance Section
+        if (report.provenance_record) {
+          html += `
+            <div class="section-title">Matched Provenance</div>
+            <div class="code-block">
+              <div class="code-line">block: ${report.provenance_record.block_number || "—"}</div>
+              <div class="code-line">hash: ${escapeHtml(report.media_hash)}</div>
+              <div class="code-line">owner: ${escapeHtml(report.provenance_record.owner || "unknown")}</div>
+            </div>
+          `;
+        }
+
+        // Selected Reference Section
+        if (report.reference_record) {
+          html += `
+            <div class="section-title">Selected Reference</div>
+            <div class="code-block">
+              <div class="code-line">block: ${report.reference_record.block_number || "—"}</div>
+              <div class="code-line">similarity: ${percent(report.reference?.score || 0)}</div>
+            </div>
+          `;
+        }
+
+        html += `
+          </div>
+        `;
+
+        return html;
+      }
+
+      function animateCountUp(element) {
+        const target = parseFloat(element.dataset.target);
+        const duration = 600;
+        const start = Date.now();
+
+        function update() {
+          const elapsed = Date.now() - start;
+          const progress = Math.min(elapsed / duration, 1);
+          const current = Math.round(target * progress * 100);
+          element.textContent = current + "%";
+          element.dataset.animated = "true";
+
+          if (progress < 1) {
+            requestAnimationFrame(update);
+          }
+        }
+
+        update();
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    </script>
+  </body>
+</html>
